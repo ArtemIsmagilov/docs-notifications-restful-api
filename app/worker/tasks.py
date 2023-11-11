@@ -25,7 +25,3 @@ async def only_send_email(user_email: str):
     )
 
     return response
-
-
-async def only_create_notification(s: AsyncIOMotorClientSession, n: NotificationIn):
-    return await Notification.insert_notification(s, n)

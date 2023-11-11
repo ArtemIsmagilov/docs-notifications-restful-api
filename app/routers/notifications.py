@@ -3,10 +3,11 @@ from fastapi import APIRouter, Depends, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorClientSession
 from fastapi import status, HTTPException
 
-from app.schema import NotificationIn
+from ..dependency import get_object_id
+from ..schema import NotificationIn
 from ..sql_app.crud import Notification, User
 from ..sql_app.database import get_db
-from ..worker.tasks import only_send_email, only_create_notification
+from ..worker.tasks import only_send_email
 
 router = APIRouter(
     prefix="/notifications",
@@ -37,23 +38,24 @@ async def create_notification(
 - user_id - строка на 24 символа (является ObjectID документа пользователя которому отправляется уведомление)
 - target_id - строка на 24 символа (является ObjectID документа сущности, к которой относится уведомление) (Может отсутствовать)
 - key - ключ уведомления enum
-- registration (Только отправит пользователю Email)
-- new_message (только создаст запись в документе пользователя)
-- new_post (только создаст запись в документе пользователя)
-- new_login (Создаст запись в документе пользователя и отправит email)
+    * registration (Только отправит пользователю Email)
+    * new_message (только создаст запись в документе пользователя)
+    * new_post (только создаст запись в документе пользователя)
+    * new_login (Создаст запись в документе пользователя и отправит email)
 - data - произвольный объект из пар ключ/значение (Может отсутствовать)
 """
-    user = await User.get_user(session, n.user_id)
-    user_email = user['email']
+    user = await User.get_user(session, get_object_id(n.user_id))
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, 'User with user_id=%s doesn\'t exists.' % n.user_id)
 
     match n.key:
         case "registration":
-            background_tasks.add_task(only_send_email, user_email)
+            background_tasks.add_task(only_send_email, user['email'])
         case "new_message" | "new_post":
-            await only_create_notification(session, n)
+            await Notification.insert_notification(session, n, user)
         case "new_login":
-            background_tasks.add_task(only_send_email, user_email)
-            await only_create_notification(session, n)
+            background_tasks.add_task(only_send_email, user['email'])
+            await Notification.insert_notification(session, n, user)
         case _:
             HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal Server Error")
 
@@ -148,7 +150,7 @@ async def read_notification(
 - user_id [string] - идентификатор пользователя
 - notification_id [string] - Идентификатор уведомления
 """
-    await Notification.make_read_notification(session, user_id, notification_id)
+    await Notification.make_read_notification(session, user_id, get_object_id(notification_id))
     return {
         "success": True,
     }

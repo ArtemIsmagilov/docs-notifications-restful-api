@@ -1,10 +1,9 @@
 import time
 from typing import AsyncGenerator
 from bson.objectid import ObjectId
-from fastapi import HTTPException
-from fastapi import status
 from motor.motor_asyncio import AsyncIOMotorClientSession
 
+from ..dependency import get_object_id
 from ..schema import NotificationIn
 from ..sql_app.database import col_users, col_notifications
 
@@ -12,19 +11,14 @@ from ..sql_app.database import col_users, col_notifications
 class User:
 
     @classmethod
-    async def get_user(cls, s: AsyncIOMotorClientSession, user_id: str) -> dict:
-        return await col_users.find_one({'_id': ObjectId(user_id)}, session=s)
+    async def get_user(cls, s: AsyncIOMotorClientSession, _id: ObjectId) -> dict:
+        return await col_users.find_one({'_id': _id}, session=s)
 
 
 class Notification:
 
     @classmethod
-    async def insert_notification(cls, s: AsyncIOMotorClientSession, n: NotificationIn):
-        user = await User.get_user(s, n.user_id)
-
-        if not user:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, 'User with user_id=%s doesn\'t exists.' % n.user_id)
-
+    async def insert_notification(cls, s: AsyncIOMotorClientSession, n: NotificationIn, user: dict):
         n_doc = n.model_dump(mode='json')
         n_doc.update(timestamp=time.time(), is_new=True)
 
@@ -84,8 +78,8 @@ class Notification:
         return result
 
     @classmethod
-    async def make_read_notification(cls, s: AsyncIOMotorClientSession, user_id: str, notification_id: str) -> int:
+    async def make_read_notification(cls, s: AsyncIOMotorClientSession, user_id: str, _id: ObjectId) -> int:
         result = await col_notifications.update_one(
-            {'_id': ObjectId(notification_id), 'user_id': user_id}, {"$set": {"is_new": False}}, session=s
+            {'_id': _id, 'user_id': user_id}, {"$set": {"is_new": False}}, session=s
         )
         return result.modified_count

@@ -175,6 +175,7 @@ For testing, you need add first user in Mongo(example, with mongo-express)
 - web auth 
   + username: `admin` 
   + password: `pass`
+- create database with name `artem`
 - create 2 collections: `users`, `notifications`
 - create first user in collection `users`: 
   ```text
